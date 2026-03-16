@@ -8,7 +8,9 @@
 <img width="1024" alt="remote-opencode logo" src="./asset/remo-code-logo.png" />
 </div>
 
-> 🎤 **New in v1.4!** Voice message support — send voice messages that are automatically transcribed and processed. [See demo](#-voice-mode-demo)
+> 🆕 **New in v1.5!** Session management — browse, attach, and manage OpenCode CLI sessions from Discord with `/session`. Plus: model autocomplete for `/model set`. [See changelog](#changelog)
+>
+> 🎤 **v1.4:** Voice message support — send voice messages that are automatically transcribed and processed. [See demo](#-voice-mode-demo)
 
 **remote-opencode** is a Discord bot that bridges your local [OpenCode CLI](https://github.com/sst/opencode) to Discord, enabling you to interact with your AI coding assistant remotely. Perfect for developers who want to:
 
@@ -400,6 +402,65 @@ Manage voice message transcription settings. Requires an OpenAI API key (set via
 
 ---
 
+### `/model` — List & Set AI Model
+
+View available AI models or set the model for the current channel.
+
+```
+/model list
+/model set name:anthropic/claude-sonnet-4-20250514
+```
+
+| Subcommand | Description                                       |
+| ---------- | ------------------------------------------------- |
+| `list`     | Show all available models grouped by provider     |
+| `set`      | Set the AI model for the current channel/thread   |
+
+**Features:**
+
+- 🔍 **Autocomplete** — start typing a model name and get instant suggestions
+- 📋 **Full model list** — all models are shown with automatic message splitting when output exceeds Discord's limit
+- 💾 **Per-channel persistence** — model preferences are saved per channel/thread
+- ⚡ **Fast validation** — model names are validated against a background-cached list (no blocking CLI calls)
+
+---
+
+### `/session` — Browse & Manage Sessions
+
+Browse OpenCode CLI sessions and manage session-thread mappings. Useful for resuming previous conversations or sharing sessions across threads.
+
+```
+/session list
+/session attach
+/session detach
+/session info
+```
+
+| Subcommand | Description                                                  |
+| ---------- | ------------------------------------------------------------ |
+| `list`     | List all sessions for the current project (active + mapped)  |
+| `attach`   | Attach an existing session to this thread (interactive menu) |
+| `detach`   | Disconnect the session from this thread                      |
+| `info`     | Show detailed status of the attached session                 |
+
+**How it works:**
+
+1. Use `/session list` to see all sessions for the bound project
+2. In a thread, use `/session attach` → select a session from the dropdown
+3. The thread now continues that session's conversation (with `freshContext` automatically disabled)
+4. Use `/session info` to check if the session is alive, see its port, creation time, etc.
+5. Use `/session detach` to disconnect and start fresh
+
+**Features:**
+
+- 📋 **Merged view** — combines active server sessions with persisted thread mappings
+- 🔗 **Interactive attach** — dropdown menu shows session title, ID, mapping status, and recency
+- ⚠️ **Cross-thread warning** — notifies when attaching a session already used in another thread
+- 📊 **Rich info embed** — session status, port, SSE state, timestamps in a clean embed
+- 🧹 **Clean detach** — properly disconnects SSE and clears session mapping
+
+---
+
 ## Usage Workflow
 
 ### Basic Workflow
@@ -674,6 +735,8 @@ src/
 │   ├── code.ts            # Passthrough mode toggle
 │   ├── work.ts            # Worktree management
 │   ├── diff.ts            # Git diff viewer
+│   ├── model.ts           # AI model list/set with autocomplete
+│   ├── session.ts         # Session browsing and management
 │   ├── allow.ts           # Allowlist management
 │   ├── voice.ts           # Voice transcription settings
 │   ├── setpath.ts         # Project registration
@@ -706,6 +769,18 @@ src/
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for a full history of changes.
+
+### [1.5.0] - 2026-03-16
+
+#### Added
+
+- **`/session` Command**: Browse, attach, detach, and inspect OpenCode CLI sessions from Discord — resume previous conversations or share sessions across threads.
+- **Model Autocomplete**: `/model set` now suggests model names as you type.
+- **Full Model List**: `/model list` shows all available models without per-provider caps.
+
+#### Changed
+
+- Model validation now uses a fast in-memory cache instead of blocking CLI calls.
 
 ### [1.4.0] - 2026-03-10
 

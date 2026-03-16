@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-03-16
+
+### Added
+- **`/session` Command**: Browse and manage OpenCode CLI sessions directly from Discord.
+  - `list`: View all sessions for the current project — merges active server sessions with persisted thread mappings, showing title, session ID, mapped thread, and last-used time.
+  - `attach`: Attach an existing CLI session to the current thread via an interactive dropdown menu. Automatically sets `freshContext: false` to preserve conversation continuity.
+  - `detach`: Disconnect the current session from the thread, cleaning up SSE connections.
+  - `info`: Display detailed session status in a rich embed — session ID, project path, port, alive/dead status, creation time, last used time, and SSE connection state.
+- **Model Autocomplete**: `/model set` now provides real-time autocomplete suggestions as you type, powered by a background-cached model list (30s TTL with async refresh).
+- **Model Cache Pre-warming**: The bot pre-loads the model list on startup so the first `/model set` autocomplete is instant — no cold-start timeout.
+- **Autocomplete Handler**: Added generic autocomplete infrastructure to `interactionHandler.ts` — commands can now export an `autocomplete` method.
+
+### Changed
+- **`/model list` Full Display**: Removed the 10-model-per-provider cap. All models are now shown, with automatic message splitting when output exceeds Discord's 2000-character limit.
+- **Model Validation**: `/model set` now validates against a fast in-memory cache instead of a blocking `execSync` call, eliminating interaction timeouts on slow systems.
+
+### Fixed
+- **Autocomplete Timeout**: Prevented Discord autocomplete interaction crashes on cold cache by falling back to an empty response when models haven't loaded yet.
+- **Async Cache Refresh**: Model cache now refreshes asynchronously in the background, preventing the 3-second autocomplete deadline from being exceeded on stale cache.
+
 ## [1.4.3] - 2026-03-16
 
 ### Fixed
