@@ -1,4 +1,4 @@
-import { Collection, SlashCommandBuilder } from 'discord.js';
+import { Collection, SlashCommandBuilder, AutocompleteInteraction } from 'discord.js';
 import { setpath } from './setpath.js';
 import { projects } from './projects.js';
 import { use } from './use.js';
@@ -17,6 +17,7 @@ import { session } from './session.js';
 export interface Command {
   data: SlashCommandBuilder;
   execute: (interaction: any) => Promise<void>;
+  autocomplete?: (interaction: AutocompleteInteraction) => Promise<void>;
 }
 
 export const commands = new Collection<string, Command>();
