@@ -1,9 +1,10 @@
 import { Bot } from 'grammy';
 import pc from 'picocolors';
-import { getTelegramConfig } from '../services/configStore.js';
+import { getTelegramConfig, getProjectsBasePaths, getOpenCodeConfigPath } from '../services/configStore.js';
 import { initializeProxySupport } from '../services/proxySupport.js';
 import * as serveManager from '../services/serveManager.js';
 import { getCachedModels } from '../commands/model.js';
+import { getProjects } from '../services/dataStore.js';
 import { setRunPromptFn } from './telegramQueueManager.js';
 import { runPrompt } from './telegramExecutionService.js';
 import {
@@ -29,6 +30,52 @@ import {
   handleShowStats,
   handleMessage,
 } from './telegramHandlers.js';
+
+function printStartupSummary(models: string[]): void {
+  const divider = pc.dim('─'.repeat(52));
+
+  console.log('');
+  console.log(divider);
+  console.log(`  ${pc.bold(pc.cyan('remote-opencode'))}  ${pc.dim('Telegram Bot')}`);
+  console.log(divider);
+
+  // OpenCode config
+  const configPath = getOpenCodeConfigPath();
+  if (configPath) {
+    console.log(`  ${pc.dim('Config')}   ${pc.green('✓')} ${pc.dim(configPath)}`);
+  } else {
+    console.log(`  ${pc.dim('Config')}   ${pc.yellow('⚠')}  ${pc.yellow('OPENCODE_CONFIG_PATH not set')}`);
+  }
+
+  // Projects
+  const basePaths = getProjectsBasePaths();
+  const projects = getProjects();
+  if (projects.length > 0) {
+    console.log(`  ${pc.dim('Projects')} ${pc.green('✓')} ${pc.bold(String(projects.length))} detected ${pc.dim(`(base: ${basePaths.join(', ') || '—'})`)}`);
+    for (const p of projects.slice(0, 5)) {
+      console.log(`    ${pc.dim('·')} ${pc.cyan(p.alias)}`);
+    }
+    if (projects.length > 5) {
+      console.log(`    ${pc.dim(`… and ${projects.length - 5} more`)}`);
+    }
+  } else {
+    console.log(`  ${pc.dim('Projects')} ${pc.yellow('⚠')}  no projects found ${pc.dim(`(base: ${basePaths.join(', ') || '—'})`)}`);
+  }
+
+  // Models
+  if (models.length > 0) {
+    // group by provider (part before first '/')
+    const providers = [...new Set(models.map(m => m.split('/')[0]))];
+    console.log(`  ${pc.dim('Models')}   ${pc.green('✓')} ${pc.bold(String(models.length))} loaded ${pc.dim(`(${providers.join(', ')})`)}`);
+    // show default (first) model
+    console.log(`  ${pc.dim('Default')}  ${pc.dim('→')} ${pc.cyan(models[0])}`);
+  } else {
+    console.log(`  ${pc.dim('Models')}   ${pc.yellow('⚠')}  no models found — check opencode config & PATH`);
+  }
+
+  console.log(divider);
+  console.log('');
+}
 
 export async function startTelegramBot(): Promise<void> {
   const config = getTelegramConfig();
@@ -101,12 +148,18 @@ export async function startTelegramBot(): Promise<void> {
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
   initializeProxySupport();
-  try { getCachedModels(); } catch { }
 
-  console.log(pc.dim('Starting Telegram bot...'));
+  // Load models synchronously so startup summary is complete before bot connects
+  let models: string[] = [];
+  try { models = getCachedModels(); } catch { }
+
+  printStartupSummary(models);
+
+  console.log(pc.dim('Connecting to Telegram...'));
   await bot.start({
     onStart: (botInfo) => {
-      console.log(pc.green(`Ready! Logged in as ${pc.bold(`@${botInfo.username}`)}`));
+      console.log(pc.green(`✓ Connected as ${pc.bold(`@${botInfo.username}`)}`));
+      console.log('');
     },
   });
 }
