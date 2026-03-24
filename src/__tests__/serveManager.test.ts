@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(),
@@ -23,11 +26,6 @@ vi.mock('node:net', () => ({
 
 vi.mock('../services/configStore.js', () => ({
   getPortConfig: vi.fn(),
-  ensureOpenCodeConfig: vi.fn(),
-}));
-
-vi.mock('../utils/authHelper.js', () => ({
-  getAuthHeaders: vi.fn().mockReturnValue({}),
 }));
 
 import * as serveManager from '../services/serveManager.js';
@@ -47,12 +45,18 @@ const createMockProcess = (): ChildProcess => {
 };
 
 describe('serveManager', () => {
+  let originalPath: string | undefined;
+
   beforeEach(() => {
     vi.resetAllMocks();
+    originalPath = process.env.PATH;
+    vi.stubEnv('PATH', '/nonexistent');
   });
 
   afterEach(() => {
     serveManager.stopAll();
+    vi.unstubAllEnvs();
+    process.env.PATH = originalPath;
   });
 
   describe('spawnServe', () => {
@@ -66,12 +70,35 @@ describe('serveManager', () => {
       expect(port).toBeGreaterThanOrEqual(14097);
       expect(port).toBeLessThanOrEqual(14200);
       expect(spawn).toHaveBeenCalledWith(
-        expect.stringContaining('opencode'),
+        'opencode',
         ['serve', '--port', port.toString()],
         expect.objectContaining({
           cwd: projectPath,
+          stdio: ['inherit', 'pipe', 'pipe'],
         })
       );
+
+      const spawnOptions = vi.mocked(spawn).mock.calls[0]?.[2];
+      expect(spawnOptions).not.toHaveProperty('shell');
+    });
+
+    it('should resolve opencode from PATH before spawning', async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'remote-opencode-'));
+      const executableName = process.platform === 'win32' ? 'opencode.cmd' : 'opencode';
+      const resolvedPath = join(tempDir, executableName);
+
+      writeFileSync(resolvedPath, '@echo off');
+      vi.stubEnv('PATH', tempDir);
+
+      const mockProc = createMockProcess();
+      vi.mocked(spawn).mockReturnValue(mockProc);
+
+      try {
+        await serveManager.spawnServe('/test/project');
+        expect(vi.mocked(spawn).mock.calls[0]?.[0]).toBe(resolvedPath);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
     });
 
     it('should return existing port if serve already running for project', async () => {
@@ -104,7 +131,7 @@ describe('serveManager', () => {
 
       expect(port).toBe(20000);
       expect(spawn).toHaveBeenCalledWith(
-        expect.stringContaining('opencode'),
+        'opencode',
         ['serve', '--port', '20000'],
         expect.anything()
       );
@@ -153,17 +180,36 @@ describe('serveManager', () => {
       const mockProc = createMockProcess();
       vi.mocked(spawn).mockReturnValue(mockProc);
 
-      const projectPath = '/test/project';
+      const projectPath = process.cwd();
       await serveManager.spawnServe(projectPath);
 
-      mockProc.emit('error', new Error('spawn opencode ENOENT'));
+      const error = new Error('spawn opencode ENOENT') as NodeJS.ErrnoException;
+      error.code = 'ENOENT';
+      mockProc.emit('error', error);
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
       const state = serveManager.getInstanceState(projectPath);
       expect(state?.exited).toBe(true);
-      // formatSpawnError maps ENOENT or missing path to a descriptive message
-      expect(state?.exitError).toBeTruthy();
+      expect(state?.exitError).toContain('OpenCode executable not found');
+    });
+
+    it('should report missing project path when spawn fails with inaccessible cwd', async () => {
+      const mockProc = createMockProcess();
+      vi.mocked(spawn).mockReturnValue(mockProc);
+
+      const projectPath = '/definitely/missing/project-path';
+      await serveManager.spawnServe(projectPath);
+
+      const error = new Error('spawn opencode ENOENT') as NodeJS.ErrnoException;
+      error.code = 'ENOENT';
+      mockProc.emit('error', error);
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      const state = serveManager.getInstanceState(projectPath);
+      expect(state?.exited).toBe(true);
+      expect(state?.exitError).toContain(`Project path does not exist or is not accessible: ${projectPath}`);
     });
 
     it('should allow respawning after process exits', async () => {
@@ -268,7 +314,7 @@ describe('serveManager', () => {
       await vi.runAllTimersAsync();
       
       await expect(promise).resolves.toBeUndefined();
-      expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:14097/session', expect.objectContaining({}));
+      expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:14097/session');
     });
 
     it('should retry if fetch fails or returns not ok', async () => {
