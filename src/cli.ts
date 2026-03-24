@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 process.removeAllListeners('warning');
-import 'dotenv/config';
+import { fileURLToPath } from 'url';
+import { dirname, resolve, join } from 'path';
+import { config as dotenvConfig } from 'dotenv';
+
+// Resolve .env relative to this file's location (works regardless of cwd)
+const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+dotenvConfig({ path: join(pkgRoot, '.env') });
+
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { createRequire } from 'module';
